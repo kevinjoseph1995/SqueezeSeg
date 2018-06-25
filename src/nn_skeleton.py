@@ -65,7 +65,7 @@ class ModelSkeleton:
     self.ph_keep_prob = tf.placeholder(tf.float32, name='keep_prob')
     # projected lidar points on a 2D spherical surface
     self.ph_lidar_input = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.ZENITH_LEVEL, mc.AZIMUTH_LEVEL, 5],
+        tf.float32, [mc.BATCH_SIZE, mc.ZENITH_LEVEL, mc.AZIMUTH_LEVEL, mc.num_of_input_channels],
         name='lidar_input'
     )
     # A tensor where an element is 1 if the corresponding cell contains an
@@ -87,7 +87,7 @@ class ModelSkeleton:
         capacity=mc.QUEUE_CAPACITY,
         dtypes=[tf.float32, tf.float32, tf.float32, tf.int32, tf.float32],
         shapes=[[],
-                [mc.BATCH_SIZE, mc.ZENITH_LEVEL, mc.AZIMUTH_LEVEL, 5],
+                [mc.BATCH_SIZE, mc.ZENITH_LEVEL, mc.AZIMUTH_LEVEL, mc.num_of_input_channels],
                 [mc.BATCH_SIZE, mc.ZENITH_LEVEL, mc.AZIMUTH_LEVEL, 1],
                 [mc.BATCH_SIZE, mc.ZENITH_LEVEL, mc.AZIMUTH_LEVEL],
                 [mc.BATCH_SIZE, mc.ZENITH_LEVEL, mc.AZIMUTH_LEVEL]]
@@ -129,23 +129,65 @@ class ModelSkeleton:
       for cls_id, cls in enumerate(mc.CLASSES):
         self._activation_summary(self.prob[:, :, :, cls_id], 'prob_'+cls)
 
+  def focal_loss(self,labels, logits, gamma=2.0, alpha=0.5):
+    """
+    focal loss for multi-classification
+    FL(p_t)=-alpha(1-p_t)^{gamma}ln(p_t)
+    Notice: logits is probability after softmax    
+    :param labels: ground truth labels, shape of [batch_size]
+    :param logits: model's output, shape of [batch_size, num_cls]
+    :param gamma:
+    :param alpha:
+    :return: shape of [batch_size]
+    """
+    epsilon = 1.e-9
+    labels = tf.to_int64(labels)
+    labels = tf.convert_to_tensor(labels, tf.int64)
+    logits = tf.convert_to_tensor(logits, tf.float32)
+    num_cls = logits.shape[1]
+
+    model_out = tf.add(logits, epsilon)
+    onehot_labels = tf.one_hot(labels, num_cls)
+    ce = tf.multiply(onehot_labels, -tf.log(model_out))
+    weight = tf.multiply(onehot_labels, tf.pow(tf.subtract(1., model_out), gamma))
+    fl = tf.multiply(alpha, tf.multiply(weight, ce))
+    reduced_fl = tf.reduce_max(fl, axis=1)
+    # reduced_fl = tf.reduce_sum(fl, axis=1)  # same as reduce_max
+    return reduced_fl
+
+
   def _add_loss_graph(self):
     """Define the loss operation."""
-    mc = self.mc
+    mc = self.mc  
+    if mc.use_focal_loss:        
+        with tf.variable_scope('cls_loss') as scope:
+            self.cls_loss = tf.identity(
+                tf.reduce_sum(
+                    self.focal_loss(
+                        labels=tf.reshape(self.label, (-1, )),
+                        logits=tf.reshape(tf.nn.softmax(logits=self.output_prob,axis=3), (-1, mc.NUM_CLASS))
+                    ) \
+                    * tf.reshape(self.lidar_mask, (-1, )) \
+                    * tf.reshape(self.loss_weight, (-1, ))
+                )/tf.reduce_sum(self.lidar_mask)*mc.CLS_LOSS_COEF,
+                name='cls_loss'
+            )
+            tf.add_to_collection('losses', self.cls_loss)
+    else:
+        with tf.variable_scope('cls_loss') as scope:
+            self.cls_loss = tf.identity(
+                tf.reduce_sum(
+                    tf.nn.sparse_softmax_cross_entropy_with_logits(
+                        labels=tf.reshape(self.label, (-1, )),
+                        logits=tf.reshape(self.output_prob, (-1, mc.NUM_CLASS))
+                    ) \
+                    * tf.reshape(self.lidar_mask, (-1, )) \
+                    * tf.reshape(self.loss_weight, (-1, ))
+                )/tf.reduce_sum(self.lidar_mask)*mc.CLS_LOSS_COEF,
+                name='cls_loss'
+            )
+            tf.add_to_collection('losses', self.cls_loss)
 
-    with tf.variable_scope('cls_loss') as scope:
-      self.cls_loss = tf.identity(
-          tf.reduce_sum(
-              tf.nn.sparse_softmax_cross_entropy_with_logits(
-                  labels=tf.reshape(self.label, (-1, )),
-                  logits=tf.reshape(self.output_prob, (-1, mc.NUM_CLASS))
-              ) \
-              * tf.reshape(self.lidar_mask, (-1, )) \
-              * tf.reshape(self.loss_weight, (-1, ))
-          )/tf.reduce_sum(self.lidar_mask)*mc.CLS_LOSS_COEF,
-          name='cls_loss'
-      )
-      tf.add_to_collection('losses', self.cls_loss)
 
     # add above losses as well as weight decay losses to form the total loss
     self.loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
@@ -858,8 +900,7 @@ class ModelSkeleton:
     size_z, size_a = sizes
     pad_z, pad_a = size_z//2, size_a//2
     half_filter_dim = (size_z*size_a)//2
-    batch, zenith, azimuth, in_channel = inputs.shape.as_list()
-
+    batch, zenith, azimuth, in_channel = inputs.shape.as_list()    
     # assert in_channel == 1, 'Only support input channel == 1'
 
     with tf.variable_scope(layer_name) as scope:
@@ -877,28 +918,27 @@ class ModelSkeleton:
       # diff_intensity = tf.reshape(
       #     inputs[:, :, :], [batch, zenith, azimuth, 1]) \
       #     - condensed_input[:, :, :, ::in_channel]
-
-      diff_x = tf.reshape(
-          inputs[:, :, :, 0], [batch, zenith, azimuth, 1]) \
-              - condensed_input[:, :, :, 0::in_channel]
-      diff_y = tf.reshape(
-          inputs[:, :, :, 1], [batch, zenith, azimuth, 1]) \
-              - condensed_input[:, :, :, 1::in_channel]
-      diff_z = tf.reshape(
-          inputs[:, :, :, 2], [batch, zenith, azimuth, 1]) \
-              - condensed_input[:, :, :, 2::in_channel]
-
-      bi_filters = []
-      for cls in range(mc.NUM_CLASS):
-        theta_a = mc.BILATERAL_THETA_A[cls]
-        theta_r = mc.BILATERAL_THETA_R[cls]
-        bi_filter = tf.exp(-(diff_x**2+diff_y**2+diff_z**2)/2/theta_r**2)
-        bi_filters.append(bi_filter)
-      out = tf.transpose(
-          tf.stack(bi_filters),
-          [1, 2, 3, 4, 0],
-          name='bilateral_filter_weights'
-      )
+      if mc.num_of_input_channels==5:
+          diff_x = tf.reshape(inputs[:, :, :, 0], [batch, zenith, azimuth, 1])- condensed_input[:, :, :, 0::in_channel]
+          diff_y = tf.reshape(inputs[:, :, :, 1], [batch, zenith, azimuth, 1])- condensed_input[:, :, :, 1::in_channel]
+          diff_z = tf.reshape(inputs[:, :, :, 2], [batch, zenith, azimuth, 1])- condensed_input[:, :, :, 2::in_channel]
+          bi_filters = []
+          for cls in range(mc.NUM_CLASS):
+              theta_a = mc.BILATERAL_THETA_A[cls]
+              theta_r = mc.BILATERAL_THETA_R[cls]
+              bi_filter = tf.exp(-(diff_x**2+diff_y**2+diff_z**2)/2/theta_r**2)
+              bi_filters.append(bi_filter)
+          out = tf.transpose(tf.stack(bi_filters),[1, 2, 3, 4, 0],name='bilateral_filter_weights')
+      if mc.num_of_input_channels==2:
+          diff_i = tf.reshape(inputs[:, :, :, 0], [batch, zenith, azimuth, 1])- condensed_input[:, :, :, 0::in_channel]
+          diff_r = tf.reshape(inputs[:, :, :, 1], [batch, zenith, azimuth, 1])- condensed_input[:, :, :, 1::in_channel]          
+          bi_filters = []
+          for cls in range(mc.NUM_CLASS):
+              theta_a = mc.BILATERAL_THETA_A[cls]
+              theta_r = mc.BILATERAL_THETA_R[cls]
+              bi_filter = tf.exp(-(diff_i**2+diff_r**2)/2/theta_r**2)
+              bi_filters.append(bi_filter)
+          out = tf.transpose(tf.stack(bi_filters),[1, 2, 3, 4, 0],name='bilateral_filter_weights')
 
     return out
 

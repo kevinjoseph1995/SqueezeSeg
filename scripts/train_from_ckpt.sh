@@ -60,7 +60,7 @@ done
 
 logdir="$LOG_DIR/"
 
-python ./src/train.py \
+python ./src/train_from_ckpt.py \
   --dataset=KITTI \
   --pretrained_model_path=./data/SqueezeNet/squeezenet_v1.1.pkl \
   --data_path=./data/ \
@@ -69,5 +69,6 @@ python ./src/train.py \
   --net=$NET \
   --max_steps=$STEPS \
   --summary_step=100 \
-  --checkpoint_step=1000 \
-  --gpu=$GPUID
+  --checkpoint_step=5000 \
+  --gpu=$GPUID\
+  --label_format="lilanet"

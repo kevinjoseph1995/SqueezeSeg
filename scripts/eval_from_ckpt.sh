@@ -2,20 +2,18 @@
 source activate python2.7
 export GPUID=0
 export NET="squeezeSeg"
-export IMAGE_SET="train"
+export IMAGE_SET="val"
 export LOG_DIR="./log/"
-export STEPS=25000
 
 if [ $# -eq 0 ]
 then
-  echo "Usage: ./scripts/train.sh [options]"
+  echo "Usage: ./scripts/eval.sh [options]"
   echo " "
   echo "options:"
   echo "-h, --help                show brief help"
   echo "-gpu                      gpu id"
   echo "-image_set                (train|val)"
-  echo "-log_dir                  Where to save logs."
-  echo "-steps                    Number of training steps."
+  echo "-log_dir                  Where to load models and save logs."
   exit 0
 fi
 
@@ -28,8 +26,7 @@ while test $# -gt 0; do
       echo "-h, --help                show brief help"
       echo "-gpu                      gpu id"
       echo "-image_set                (train|val)"
-      echo "-log_dir                  Where to save logs."
-      echo "-steps                    Number of training steps."
+      echo "-log_dir                  Where to load models and save logs."
       exit 0
       ;;
     -gpu)
@@ -47,11 +44,6 @@ while test $# -gt 0; do
       shift
       shift
       ;;
-    -steps)
-      export STEPS="$2"
-      shift
-      shift
-      ;;
     *)
       break
       ;;
@@ -59,15 +51,15 @@ while test $# -gt 0; do
 done
 
 logdir="$LOG_DIR/"
+traindir="$logdir/train/"
+valdir="$logdir/eval_$IMAGE_SET"
 
-python ./src/train.py \
+python ./src/eval_from_ckpt.py \
   --dataset=KITTI \
-  --pretrained_model_path=./data/SqueezeNet/squeezenet_v1.1.pkl \
   --data_path=./data/ \
   --image_set=$IMAGE_SET \
-  --train_dir="$logdir/train" \
+  --eval_dir="$valdir" \
+  --checkpoint_path="$traindir" \
   --net=$NET \
-  --max_steps=$STEPS \
-  --summary_step=100 \
-  --checkpoint_step=1000 \
-  --gpu=$GPUID
+  --gpu=$GPUID\
+  --label_format="lilanet"

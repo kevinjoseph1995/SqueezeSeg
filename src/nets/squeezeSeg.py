@@ -96,10 +96,16 @@ class SqueezeSeg(ModelSkeleton):
         'conv14_prob', drop13, filters=mc.NUM_CLASS, size=3, stride=1,
         padding='SAME', relu=False, stddev=0.1)
 
-    bilateral_filter_weights = self._bilateral_filter_layer(
-        'bilateral_filter', self.lidar_input[:, :, :, :3], # x, y, z
-        thetas=[mc.BILATERAL_THETA_A, mc.BILATERAL_THETA_R],
-        sizes=[mc.LCN_HEIGHT, mc.LCN_WIDTH], stride=1)
+    if mc.num_of_input_channels==2:        
+        bilateral_filter_weights = self._bilateral_filter_layer(
+            'bilateral_filter', self.lidar_input[:, :, :, :], # inten,depth
+            thetas=[mc.BILATERAL_THETA_A, mc.BILATERAL_THETA_R],
+            sizes=[mc.LCN_HEIGHT, mc.LCN_WIDTH], stride=1)
+    else:
+        bilateral_filter_weights = self._bilateral_filter_layer(
+            'bilateral_filter', self.lidar_input[:, :, :, :3], # x, y, z
+            thetas=[mc.BILATERAL_THETA_A, mc.BILATERAL_THETA_R],
+            sizes=[mc.LCN_HEIGHT, mc.LCN_WIDTH], stride=1)
 
     self.output_prob = self._recurrent_crf_layer(
         'recurrent_crf', conv14, bilateral_filter_weights, 

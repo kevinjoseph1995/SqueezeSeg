@@ -82,8 +82,7 @@ class imdb(object):
     for idx in batch_idx:
       # load data
       # loading from npy is 30x faster than loading from pickle
-      record = np.load(self._lidar_2d_path_at(idx)).astype(np.float32, copy=False)
-
+      record = np.load(self._lidar_2d_path_at(idx)).astype(np.float32, copy=False)      
       if mc.DATA_AUGMENTATION:
         if mc.RANDOM_FLIPPING:
           if np.random.rand() > 0.5:
@@ -95,7 +94,7 @@ class imdb(object):
       lidar_mask = np.reshape(
           (lidar[:, :, 4] > 0), 
           [mc.ZENITH_LEVEL, mc.AZIMUTH_LEVEL, 1]
-      )
+      )      
       # normalize
       lidar = (lidar - mc.INPUT_MEAN)/mc.INPUT_STD
 
@@ -103,13 +102,14 @@ class imdb(object):
       weight = np.zeros(label.shape)
       for l in range(mc.NUM_CLASS):
         weight[label==l] = mc.CLS_LOSS_WEIGHT[int(l)]
-
+      if mc.num_of_input_channels==2:
+        lidar=lidar[:,:,3:5]
       # Append all the data
       lidar_per_batch.append(lidar)
       lidar_mask_per_batch.append(lidar_mask)
       label_per_batch.append(label)
       weight_per_batch.append(weight)
-
+    
     return np.array(lidar_per_batch), np.array(lidar_mask_per_batch), \
         np.array(label_per_batch), np.array(weight_per_batch)
 

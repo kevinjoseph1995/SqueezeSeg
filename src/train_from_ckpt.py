@@ -18,7 +18,7 @@ import tensorflow as tf
 import threading
 
 from config import *
-from imdb import kitti,kitti_extended
+from imdb import kitti,kitti2,kitti_extended,kitti_extended2
 from utils.util import *
 from nets import *
 
@@ -43,8 +43,9 @@ tf.app.flags.DEFINE_integer('summary_step', 50,
 tf.app.flags.DEFINE_integer('checkpoint_step', 1000,
                             """Number of steps to save summary.""")
 tf.app.flags.DEFINE_string('gpu', '0', """gpu id.""")
+tf.app.flags.DEFINE_string('label_format', 'original', """Label Format""")
 
-def train():
+def train():  
   """Train SqueezeSeg model"""
   assert FLAGS.dataset == 'KITTI', \
       'Currently only support KITTI dataset'
@@ -57,11 +58,29 @@ def train():
         'Selected neural net architecture not supported: {}'.format(FLAGS.net)
 
     if FLAGS.net == 'squeezeSeg':
-      mc = kitti_squeezeSeg_config()#from config OR kitti_squeezeSeg_config_extended
-      mc.PRETRAINED_MODEL_PATH = FLAGS.pretrained_model_path
-      model = SqueezeSeg(mc)
+        if FLAGS.label_format=='original':
+            mc = kitti_squeezeSeg_config()
+        if FLAGS.label_format=='cityscapes':
+            mc = kitti_squeezeSeg_config_extended()
+        if FLAGS.label_format=='lilanet':
+            mc = kitti_squeezeSeg_config_extended2()
+        if FLAGS.label_format=='original_new':
+            mc = kitti_squeezeSeg_config2()
+        if FLAGS.label_format=='original_two_channel':
+            mc = kitti_squeezeSeg_config_two_channel()
+        mc.PRETRAINED_MODEL_PATH = FLAGS.pretrained_model_path
+        model = SqueezeSeg(mc)
 
-    imdb = kitti(FLAGS.image_set, FLAGS.data_path, mc)#OR kitti_extended(FLAGS.image_set, FLAGS.data_path, mc)
+    if FLAGS.label_format=='original':
+      imdb = kitti(FLAGS.image_set, FLAGS.data_path, mc)
+    if FLAGS.label_format=='cityscapes':
+      imdb = kitti_extended(FLAGS.image_set, FLAGS.data_path, mc)
+    if FLAGS.label_format=='lilanet':
+      imdb = kitti_extended2(FLAGS.image_set, FLAGS.data_path, mc)
+    if FLAGS.label_format=='original_new':
+      imdb = kitti2(FLAGS.image_set, FLAGS.data_path, mc) 
+    if FLAGS.label_format=='original_two_channel':
+      imdb = kitti(FLAGS.image_set, FLAGS.data_path, mc)
 
     # save model size, flops, activations by layers
     with open(os.path.join(FLAGS.train_dir, 'model_metrics.txt'), 'w') as f:
@@ -105,13 +124,23 @@ def train():
           }
 
           sess.run(model.enqueue_op, feed_dict=feed_dict)
-
-    saver = tf.train.Saver(tf.all_variables())
-    summary_op = tf.summary.merge_all()
-    init = tf.initialize_all_variables()
-
-    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
-    sess.run(init)
+    
+    ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
+    if ckpt==None:
+      saver = tf.train.Saver(tf.all_variables(),max_to_keep=None)
+      summary_op = tf.summary.merge_all()
+      init = tf.initialize_all_variables()
+      sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+      sess.run(init)
+      global_step=0
+    else:
+      check_point_path=ckpt.model_checkpoint_path    
+      global_step = int(float(check_point_path.split('/')[-1].split('-')[-1]))    
+      saver = tf.train.Saver(tf.all_variables(),max_to_keep=None)
+      summary_op = tf.summary.merge_all()
+      config=tf.ConfigProto(allow_soft_placement=True)
+      sess = tf.Session(config=config)
+      saver.restore(sess, check_point_path)
 
     summary_writer = tf.summary.FileWriter(FLAGS.train_dir, sess.graph)
 
@@ -154,14 +183,25 @@ def train():
 
           # Run visualization
           viz_op_list = [model.show_label, model.show_depth_img, model.show_pred]
-          viz_summary_list = sess.run(
-              viz_op_list, 
-              feed_dict={
-                  model.depth_image_to_show: lidar_per_batch[:6, :, :, [4]],
-                  model.label_to_show: label_image,
-                  model.pred_image_to_show: pred_image,
-              }
-          )
+          if mc.num_of_input_channels==2:
+              viz_summary_list = sess.run(
+                  viz_op_list, 
+                  feed_dict={
+                      model.depth_image_to_show: lidar_per_batch[:6, :, :, [0]],
+                      model.label_to_show: label_image,
+                      model.pred_image_to_show: pred_image,
+                  }
+              )
+          else:
+              viz_summary_list = sess.run(
+                  viz_op_list, 
+                  feed_dict={
+                      model.depth_image_to_show: lidar_per_batch[:6, :, :, [4]],
+                      model.label_to_show: label_image,
+                      model.pred_image_to_show: pred_image,
+                  }
+              )
+
 
           # Add summaries
           summary_writer.add_summary(summary_str, step)
@@ -199,7 +239,7 @@ def train():
         # Save the model checkpoint periodically.
         if step % FLAGS.checkpoint_step == 0 or step == FLAGS.max_steps-1:
           checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
-          saver.save(sess, checkpoint_path, global_step=step)
+          saver.save(sess, checkpoint_path, global_step=step+global_step)
     except Exception, e:
       coord.request_stop(e)
     finally:
@@ -209,9 +249,9 @@ def train():
 
 
 def main(argv=None):  # pylint: disable=unused-argument
-  if tf.gfile.Exists(FLAGS.train_dir):
-    tf.gfile.DeleteRecursively(FLAGS.train_dir)
-  tf.gfile.MakeDirs(FLAGS.train_dir)
+  # if tf.gfile.Exists(FLAGS.train_dir):
+  #   tf.gfile.DeleteRecursively(FLAGS.train_dir)
+  # tf.gfile.MakeDirs(FLAGS.train_dir)
   train()
 
 
