@@ -1,2 +1,6 @@
 *pyc
 train_dir.txt
+data/lidar*
+log/train/*
+log/eval_val/*
+model_zoo/*
