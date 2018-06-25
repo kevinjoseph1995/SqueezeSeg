@@ -3,3 +3,4 @@ train_dir.txt
 log/train/*
 log/eval_val/*
 *.npy
+*.ckpt-*
