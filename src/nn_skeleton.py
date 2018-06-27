@@ -360,7 +360,99 @@ class ModelSkeleton:
       else:
         return conv
 
+  def _conv_layer_lila(
+      self, layer_name, inputs, filters, size, stride, padding='SAME',
+      freeze=False, xavier=False, relu=True, stddev=0.001, bias_init_val=0.0):
+    """Convolutional layer operation constructor.
 
+    Args:
+      layer_name: layer name.
+      inputs: input tensor
+      filters: number of output filters.
+      size: kernel size.
+      stride: stride
+      padding: 'SAME' or 'VALID'. See tensorflow doc for detailed description.
+      freeze: if true, then do not train the parameters in this layer.
+      xavier: whether to use xavier weight initializer or not.
+      relu: whether to use relu or not.
+      stddev: standard deviation used for random weight initializer.
+    Returns:
+      A convolutional layer operation.
+    """
+
+    mc = self.mc
+    use_pretrained_param = False
+    if mc.LOAD_PRETRAINED_MODEL:
+      cw = self.caffemodel_weight
+      if layer_name in cw:
+        kernel_val = np.transpose(cw[layer_name][0], [2,3,1,0])
+        bias_val = cw[layer_name][1]
+        # check the shape
+        if (kernel_val.shape == 
+              (size[0], size[1], inputs.get_shape().as_list()[-1], filters)) \
+           and (bias_val.shape == (filters, )):
+          use_pretrained_param = True
+        else:
+          print ('Shape of the pretrained parameter of {} does not match, '
+              'use randomly initialized parameter'.format(layer_name))
+      else:
+        print ('Cannot find {} in the pretrained model. Use randomly initialized '
+               'parameters'.format(layer_name))
+
+    if mc.DEBUG_MODE:
+      print('Input tensor shape to {}: {}'.format(layer_name, inputs.get_shape()))
+
+    with tf.variable_scope(layer_name) as scope:
+      channels = inputs.get_shape()[3]
+
+      # re-order the caffe kernel with shape [out, in, h, w] -> tf kernel with
+      # shape [h, w, in, out]
+      if use_pretrained_param:
+        if mc.DEBUG_MODE:
+          print ('Using pretrained model for {}'.format(layer_name))
+        kernel_init = tf.constant(kernel_val , dtype=tf.float32)
+        bias_init = tf.constant(bias_val, dtype=tf.float32)
+      elif xavier:
+        kernel_init = tf.contrib.layers.xavier_initializer_conv2d()
+        bias_init = tf.constant_initializer(bias_init_val)
+      else:
+        kernel_init = tf.truncated_normal_initializer(
+            stddev=stddev, dtype=tf.float32)
+        bias_init = tf.constant_initializer(bias_init_val)
+
+      kernel = _variable_with_weight_decay(
+          'kernels', shape=[size[0], size[1], int(channels), filters],
+          wd=mc.WEIGHT_DECAY, initializer=kernel_init, trainable=(not freeze))
+
+      biases = _variable_on_device('biases', [filters], bias_init, 
+                                trainable=(not freeze))
+      self.model_params += [kernel, biases]
+
+      conv = tf.nn.conv2d(
+          inputs, kernel, [1, 1, stride, 1], padding=padding,
+          name='convolution')
+      conv_bias = tf.nn.bias_add(conv, biases, name='bias_add')
+  
+      if relu:
+        out = tf.nn.relu(conv_bias, 'relu')
+      else:
+        out = conv_bias
+
+      self.model_size_counter.append(
+          (layer_name, (1+size[0]*size[1]*int(channels))*filters)
+      )
+      out_shape = out.get_shape().as_list()
+      num_flops = \
+        (1+2*int(channels)*size[0]*size[1])*filters*out_shape[1]*out_shape[2]
+      if relu:
+        num_flops += 2*filters*out_shape[1]*out_shape[2]
+      self.flop_counter.append((layer_name, num_flops))
+
+      self.activation_counter.append(
+          (layer_name, out_shape[1]*out_shape[2]*out_shape[3])
+      )
+
+      return out
   def _conv_layer(
       self, layer_name, inputs, filters, size, stride, padding='SAME',
       freeze=False, xavier=False, relu=True, stddev=0.001, bias_init_val=0.0):

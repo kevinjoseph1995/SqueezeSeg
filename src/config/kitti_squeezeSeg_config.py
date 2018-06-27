@@ -310,11 +310,11 @@ def kitti_squeezeSeg_config_final():
 
   mc.LCN_HEIGHT         = 3
   mc.LCN_WIDTH          = 5
-  mc.RCRF_ITER          = 3
-  mc.BILATERAL_THETA_A  = 0.01/np.array([ 0.00399712,  0.01329649,  0.03768276,  0.04357557,  0.02629857,  0.06301627,  0.68579656,  0.05823956,  1.   ,0.60352307])
-  mc.BILATERAL_THETA_R  = 100*np.array([ 0.00399712,  0.01329649,  0.03768276,  0.04357557,  0.02629857,  0.06301627,  0.68579656,  0.05823956,  1.   ,0.60352307])
+  mc.RCRF_ITER          = 5
+  mc.BILATERAL_THETA_A  = np.array([ 0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.6,  0.9,  0.75,   0.6])
+  mc.BILATERAL_THETA_R  = np.array([ 0.015,  0.015,  0.015,  0.015,  0.015,  0.015,  0.015,  0.01,  0.015   ,0.01])
   mc.BI_FILTER_COEF     = 0.1
-  mc.ANG_THETA_A        = 0.01/np.array([ 0.00399712,  0.01329649,  0.03768276,  0.04357557,  0.02629857,  0.06301627,  0.68579656,  0.05823956,  1.   ,0.60352307])
+  mc.ANG_THETA_A        = np.array([ 0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.6,  0.9,  0.75   ,0.6])
   mc.ANG_FILTER_COEF    = 0.02
 
   mc.CLS_LOSS_COEF      = 15.0
@@ -334,7 +334,7 @@ def kitti_squeezeSeg_config_final():
   ###############
   mc.num_of_input_channels=5
   mc.use_focal_loss=False
-  mc.EVAL_ON_ORG=True
+  mc.EVAL_ON_ORG=False
   
   return mc
 

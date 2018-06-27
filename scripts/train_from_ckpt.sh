@@ -4,7 +4,7 @@ export GPUID=0
 export NET="squeezeSeg"
 export IMAGE_SET="train"
 export LOG_DIR="./log/"
-export STEPS=50000
+export STEPS=65000
 
 if [ $# -eq 0 ]
 then
@@ -65,7 +65,7 @@ python ./src/train_from_ckpt.py \
   --pretrained_model_path=./data/SqueezeNet/squeezenet_v1.1.pkl \
   --data_path=./data/ \
   --image_set=$IMAGE_SET \
-  --train_dir="$logdir/train" \
+  --train_dir="$logdir/train2" \
   --net=$NET \
   --max_steps=$STEPS \
   --summary_step=100 \

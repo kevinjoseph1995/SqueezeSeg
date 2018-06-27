@@ -103,7 +103,10 @@ def eval_once(
     otp_sum = np.zeros(mc.NUM_CLASS)
     ofn_sum = np.zeros(mc.NUM_CLASS)
     ofp_sum = np.zeros(mc.NUM_CLASS)
-    cm=np.zeros([mc.NUM_CLASS, mc.NUM_CLASS])
+    if  mc.EVAL_ON_ORG:
+        cm=np.zeros([4, 4])
+    else:
+        cm=np.zeros([mc.NUM_CLASS, mc.NUM_CLASS])
     for i in xrange(int(num_images/mc.BATCH_SIZE)):
       offset = max((i+1)*mc.BATCH_SIZE - num_images, 0)
       
@@ -127,12 +130,13 @@ def eval_once(
 
       if  mc.EVAL_ON_ORG:
           print('Translating labels...')
-          pred_cls[(pred_cls!=0)*(pred_cls!=8)*(pred_cls!=9)*(pred_cls!=10)] =0 
-          pred_cls[pred_cls==8]=2
+          pred_cls[(pred_cls!=0)*(pred_cls!=7)*(pred_cls!=6)*(pred_cls!=9)] =0 
+          pred_cls[pred_cls==6]=2
           pred_cls[pred_cls==9]=3
-          pred_cls[pred_cls==10]=1      
-      
-      cm+=confusion_matrix(y_true=label_per_batch.flatten(), y_pred=pred_cls.flatten(), labels=range(mc.NUM_CLASS))
+          pred_cls[pred_cls==7]=1  
+          cm+=confusion_matrix(y_true=label_per_batch.flatten(), y_pred=pred_cls.flatten(), labels=range(4))
+      else:
+          cm+=confusion_matrix(y_true=label_per_batch.flatten(), y_pred=pred_cls.flatten(), labels=range(mc.NUM_CLASS))
       # Evaluation
       iou, tps, fps, fns = evaluate_iou(
           label_per_batch[:mc.BATCH_SIZE-offset],
@@ -170,29 +174,35 @@ def eval_once(
         eval_summary_phs['Timing/read']:_t['read'].average_time/mc.BATCH_SIZE,
     }
     if mc.EVAL_ON_ORG:
-        classes=['unknown', 'car', 'pedestrian', 'cyclist']
-        num_of_classes=4
-    else:
-        classes=mc.CLASSES
-        num_of_classes=mc.NUM_CLASS
+        print ('  Accuracy:')
+        classes=['unknown' ,  'car', 'pedestrian'  ,  'cyclist']
+        for i in range(1, 4):
+            print ('    {}:'.format(classes[i]))
+            print ('\tPixel-seg: P: {:.3f}, R: {:.3f}, IoU: {:.3f}'.format(
+                pr[i], re[i], ious[i]))
+
     print ('  Accuracy:')
-    for i in range(1, num_of_classes):
-      print ('    {}:'.format(classes[i]))
-      print ('\tPixel-seg: P: {:.3f}, R: {:.3f}, IoU: {:.3f}'.format(
-          pr[i], re[i], ious[i]))
+    for i in range(1, mc.NUM_CLASS):
+      if not mc.EVAL_ON_ORG:
+          print ('    {}:'.format(mc.CLASSES[i]))
+          print ('\tPixel-seg: P: {:.3f}, R: {:.3f}, IoU: {:.3f}'.format(pr[i], re[i], ious[i]))
       eval_sum_feed_dict[
-          eval_summary_phs['Pixel_seg_accuracy/'+classes[i]+'_iou']] = ious[i]
+          eval_summary_phs['Pixel_seg_accuracy/'+mc.CLASSES[i]+'_iou']] = ious[i]
       eval_sum_feed_dict[
-          eval_summary_phs['Pixel_seg_accuracy/'+classes[i]+'_precision']] = pr[i]
+          eval_summary_phs['Pixel_seg_accuracy/'+mc.CLASSES[i]+'_precision']] = pr[i]
       eval_sum_feed_dict[
-          eval_summary_phs['Pixel_seg_accuracy/'+classes[i]+'_recall']] = re[i]
+          eval_summary_phs['Pixel_seg_accuracy/'+mc.CLASSES[i]+'_recall']] = re[i]
 
     eval_summary_str = sess.run(eval_summary_ops, feed_dict=eval_sum_feed_dict)
     for sum_str in eval_summary_str:
       summary_writer.add_summary(sum_str, global_step)
     summary_writer.flush()  
-    cm = cm / cm.sum(axis=1)[:, np.newaxis]  
-    print_cm(cm, classes)
+    cm = cm / cm.sum(axis=1)[:, np.newaxis] 
+    if  mc.EVAL_ON_ORG:
+        print_cm(cm, ['unknown' ,  'car', 'pedestrian'  ,  'cyclist'])
+    else:
+        print_cm(cm, mc.CLASSES[i])
+        
 
 def evaluate():
   """Evaluate."""
