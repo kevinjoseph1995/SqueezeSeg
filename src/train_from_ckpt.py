@@ -18,7 +18,7 @@ import tensorflow as tf
 import threading
 
 from config import *
-from imdb import kitti,kitti2,kitti_extended,kitti_extended2
+from imdb import kitti,kitti_extended,kitti_extended2,kitti2,kitti_final
 from utils.util import *
 from nets import *
 
@@ -68,6 +68,8 @@ def train():
             mc = kitti_squeezeSeg_config2()
         if FLAGS.label_format=='original_two_channel':
             mc = kitti_squeezeSeg_config_two_channel()
+        if FLAGS.label_format=='final':
+            mc = kitti_squeezeSeg_config_final()
         mc.PRETRAINED_MODEL_PATH = FLAGS.pretrained_model_path
         model = SqueezeSeg(mc)
 
@@ -81,6 +83,8 @@ def train():
       imdb = kitti2(FLAGS.image_set, FLAGS.data_path, mc) 
     if FLAGS.label_format=='original_two_channel':
       imdb = kitti(FLAGS.image_set, FLAGS.data_path, mc)
+    if FLAGS.label_format=='final':
+      imdb = kitti_final(FLAGS.image_set, FLAGS.data_path, mc)
 
     # save model size, flops, activations by layers
     with open(os.path.join(FLAGS.train_dir, 'model_metrics.txt'), 'w') as f:
@@ -127,6 +131,7 @@ def train():
     
     ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
     if ckpt==None:
+      '''Creating a new Checkpoint'''
       saver = tf.train.Saver(tf.all_variables(),max_to_keep=None)
       summary_op = tf.summary.merge_all()
       init = tf.initialize_all_variables()
@@ -134,13 +139,35 @@ def train():
       sess.run(init)
       global_step=0
     else:
-      check_point_path=ckpt.model_checkpoint_path    
-      global_step = int(float(check_point_path.split('/')[-1].split('-')[-1]))    
-      saver = tf.train.Saver(tf.all_variables(),max_to_keep=None)
-      summary_op = tf.summary.merge_all()
-      config=tf.ConfigProto(allow_soft_placement=True)
-      sess = tf.Session(config=config)
-      saver.restore(sess, check_point_path)
+      '''Restoring Checkpoint '''
+      var_list=tf.all_variables()
+      new_var_list=[variable for variable in var_list if "recurrent_crf" not in variable.name and "conv14_prob" not in variable.name]
+      try:
+        '''Restoring all variables '''
+        check_point_path=ckpt.model_checkpoint_path    
+        global_step = int(float(check_point_path.split('/')[-1].split('-')[-1]))    
+        saver = tf.train.Saver(tf.all_variables(),max_to_keep=None)
+        summary_op = tf.summary.merge_all()
+        config=tf.ConfigProto(allow_soft_placement=True)
+        sess = tf.Session(config=config)
+        saver.restore(sess, check_point_path)
+      except tf.errors.InvalidArgumentError:
+        '''Restoring only variables with matching shapes, other variables are randomly initialized'''
+        print("###########Number of output channels/labels different from checkpoint. Not restoring the Recurrent CRF Layer and conv14 layer###########")
+        check_point_path=ckpt.model_checkpoint_path    
+        global_step = int(float(check_point_path.split('/')[-1].split('-')[-1]))    
+        saver = tf.train.Saver(new_var_list,max_to_keep=None)
+        summary_op = tf.summary.merge_all()
+        config=tf.ConfigProto(allow_soft_placement=True)
+        sess = tf.Session(config=config)
+        saver.restore(sess, check_point_path)
+        '''initializing CRF parameters and conv14 layer'''
+        r_crf_var_list=[variable for variable in var_list if "recurrent_crf" in variable.name or "conv14_prob"  in variable.name]
+        init_new_vars_op = tf.initialize_variables(r_crf_var_list)
+        sess.run(init_new_vars_op)
+        '''Setting up global saver'''
+        saver = tf.train.Saver(tf.all_variables(),max_to_keep=None)
+
 
     summary_writer = tf.summary.FileWriter(FLAGS.train_dir, sess.graph)
 

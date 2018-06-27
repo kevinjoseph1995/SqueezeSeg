@@ -1,14 +1,14 @@
 import numpy as np
 import os
 
-data_path=os.getcwd()+'/lidar_2d_reduced_classes/'
+data_path=os.getcwd()+'/lidar_2d_final/'
 text_file = open("./ImageSet/allV2.txt", "r")
 file_names = text_file.read().split('\n')
 
 total=len(file_names[:-1])
 #CLASSES= ['unknown', 'road', 'sidewalk', 'building','wall','fence','pole','traffic-light','traffic-sign','vegetation','terrain','sky','person',\
 #                               'rider','car','truck','bus','train','motorcycle','bicycle']
-CLASSES= ['unknown', 'road', 'sidewalk', 'construction','pole','traffic-sign','vegetation','terrain','person','rider','small-vehicle','large-vehicle','two-wheeler']
+CLASSES=['unknown', 'road', 'sidewalk', 'construction','vegetation','terrain','person','small-vehicle','large-vehicle','two-wheeler'] 
 total_cont=np.zeros([len(CLASSES)],dtype='int')                        
 for name in file_names[:-1]:
     lidar_data=np.load(data_path+name+'.npy')    

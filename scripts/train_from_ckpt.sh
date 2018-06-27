@@ -4,7 +4,7 @@ export GPUID=0
 export NET="squeezeSeg"
 export IMAGE_SET="train"
 export LOG_DIR="./log/"
-export STEPS=25000
+export STEPS=50000
 
 if [ $# -eq 0 ]
 then
@@ -71,4 +71,4 @@ python ./src/train_from_ckpt.py \
   --summary_step=100 \
   --checkpoint_step=5000 \
   --gpu=$GPUID\
-  --label_format="lilanet"
+  --label_format="final"

@@ -62,4 +62,4 @@ python ./src/eval_from_ckpt.py \
   --checkpoint_path="$traindir" \
   --net=$NET \
   --gpu=$GPUID\
-  --label_format="lilanet"
+  --label_format="final"

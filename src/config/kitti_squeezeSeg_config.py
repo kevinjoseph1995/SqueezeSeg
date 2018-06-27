@@ -46,9 +46,11 @@ def kitti_squeezeSeg_config():
   # x, y, z, intensity, distance
   mc.INPUT_MEAN         = np.array([[[10.88, 0.23, -1.04, 0.21, 12.12]]])
   mc.INPUT_STD          = np.array([[[11.47, 6.91, 0.86, 0.16, 12.32]]])
+  ###############
   mc.num_of_input_channels=5
   mc.use_focal_loss=False
-
+  mc.EVAL_ON_ORG=False
+  
   return mc
 
 def kitti_squeezeSeg_config_extended():
@@ -120,6 +122,7 @@ def kitti_squeezeSeg_config_extended():
   mc.INPUT_STD          = np.array([[[10.9252722964, 4.8862697957, 0.775360202555, 11.6589714541, 0.166859600962]]])
   mc.num_of_input_channels=5
   mc.use_focal_loss=False
+  mc.EVAL_ON_ORG=False
 
   return mc
 
@@ -187,8 +190,8 @@ def kitti_squeezeSeg_config_extended2():
   mc.INPUT_MEAN         = np.array([[[7.11174452147, 0.0943776729418, -0.500243253951, 0.110507476635,7.70754909688]]])
   mc.INPUT_STD          = np.array([[[10.9252722964, 4.8862697957, 0.775360202555, 0.166859600962,11.6589714541]]])
   mc.num_of_input_channels=5
-  mc.use_focal_loss=True
-
+  mc.use_focal_loss=False
+  mc.EVAL_ON_ORG=False  
   return mc
 
 def kitti_squeezeSeg_config2():
@@ -224,6 +227,7 @@ def kitti_squeezeSeg_config2():
   mc.MAX_GRAD_NORM      = 1.0
   mc.MOMENTUM           = 0.9
   mc.LR_DECAY_FACTOR    = 0.5
+  
 
   mc.DATA_AUGMENTATION  = True
   mc.RANDOM_FLIPPING    = True
@@ -233,7 +237,7 @@ def kitti_squeezeSeg_config2():
   mc.INPUT_STD          = np.array([[[10.9252722964, 4.8862697957, 0.775360202555, 0.166859600962,11.6589714541]]])
   mc.num_of_input_channels=5
   mc.use_focal_loss=False
-
+  mc.EVAL_ON_ORG=False
   return mc
 
 def kitti_squeezeSeg_config_two_channel():
@@ -278,7 +282,59 @@ def kitti_squeezeSeg_config_two_channel():
   mc.INPUT_STD          = np.array([[[11.47, 6.91, 0.86, 0.16, 12.32]]])
   mc.num_of_input_channels=2
   mc.use_focal_loss=False
-
+  mc.EVAL_ON_ORG=False  
   return mc
 
+def kitti_squeezeSeg_config_final():
+  """Specify the parameters to tune below."""
+  mc                    = base_model_config('KITTI')
+
+  mc.CLASSES            = ['unknown', 'road', 'sidewalk', 'construction','vegetation','terrain','person','small-vehicle','large-vehicle','two-wheeler'] 
+  mc.NUM_CLASS          = len(mc.CLASSES)
+  mc.CLS_2_ID           = dict(zip(mc.CLASSES, range(len(mc.CLASSES))))
+  mc.CLS_LOSS_WEIGHT    = np.array([ 0.00399712,  0.01329649,  0.03768276,  0.04357557,  0.02629857,  0.06301627,  0.68579656,  0.05823956,  1.   ,0.60352307])
+  mc.CLS_COLOR_MAP      = np.array([[ 0,  0,  0],
+                                    [ 128,64,128],
+                                    [ 244,35,232],
+                                    [ 70, 70, 70],                                    
+                                    [ 107,142,35],
+                                    [ 152,251,152], 
+                                    [ 220,20,60],                                    
+                                    [ 0,0,142],
+                                    [ 0,0,70],
+                                    [ 0,0,230]])
+
+  mc.BATCH_SIZE         = 32
+  mc.AZIMUTH_LEVEL      = 512
+  mc.ZENITH_LEVEL       = 64
+
+  mc.LCN_HEIGHT         = 3
+  mc.LCN_WIDTH          = 5
+  mc.RCRF_ITER          = 3
+  mc.BILATERAL_THETA_A  = 0.01/np.array([ 0.00399712,  0.01329649,  0.03768276,  0.04357557,  0.02629857,  0.06301627,  0.68579656,  0.05823956,  1.   ,0.60352307])
+  mc.BILATERAL_THETA_R  = 100*np.array([ 0.00399712,  0.01329649,  0.03768276,  0.04357557,  0.02629857,  0.06301627,  0.68579656,  0.05823956,  1.   ,0.60352307])
+  mc.BI_FILTER_COEF     = 0.1
+  mc.ANG_THETA_A        = 0.01/np.array([ 0.00399712,  0.01329649,  0.03768276,  0.04357557,  0.02629857,  0.06301627,  0.68579656,  0.05823956,  1.   ,0.60352307])
+  mc.ANG_FILTER_COEF    = 0.02
+
+  mc.CLS_LOSS_COEF      = 15.0
+  mc.WEIGHT_DECAY       = 0.0001
+  mc.LEARNING_RATE      = 0.01
+  mc.DECAY_STEPS        = 10000
+  mc.MAX_GRAD_NORM      = 1.0
+  mc.MOMENTUM           = 0.9
+  mc.LR_DECAY_FACTOR    = 0.5
+
+  mc.DATA_AUGMENTATION  = True
+  mc.RANDOM_FLIPPING    = True
+
+  # x, y, z, intensity, distance
+  mc.INPUT_MEAN         = np.array([[[7.11174452147, 0.0943776729418, -0.500243253951, 0.110507476635,7.70754909688]]])
+  mc.INPUT_STD          = np.array([[[10.9252722964, 4.8862697957, 0.775360202555, 0.166859600962,11.6589714541]]])
+  ###############
+  mc.num_of_input_channels=5
+  mc.use_focal_loss=False
+  mc.EVAL_ON_ORG=True
+  
+  return mc
 

@@ -16,7 +16,7 @@ from six.moves import xrange
 import tensorflow as tf
 
 from config import *
-from imdb import kitti,kitti2,kitti_extended,kitti_extended2
+from imdb import kitti,kitti2,kitti_extended,kitti_extended2,kitti_final
 from utils.util import *
 from nets import *
 from sklearn.metrics import confusion_matrix
@@ -103,7 +103,7 @@ def eval_once(
     otp_sum = np.zeros(mc.NUM_CLASS)
     ofn_sum = np.zeros(mc.NUM_CLASS)
     ofp_sum = np.zeros(mc.NUM_CLASS)
-    cm=np.zeros([len(mc.CLASSES), len(mc.CLASSES)])
+    cm=np.zeros([mc.NUM_CLASS, mc.NUM_CLASS])
     for i in xrange(int(num_images/mc.BATCH_SIZE)):
       offset = max((i+1)*mc.BATCH_SIZE - num_images, 0)
       
@@ -123,8 +123,16 @@ def eval_once(
       )
       _t['detect'].toc()
 
-      _t['eval'].tic()  
-      cm+=confusion_matrix(y_true=label_per_batch.flatten(), y_pred=pred_cls.flatten(), labels=range(len(mc.CLASSES)))
+      _t['eval'].tic() 
+
+      if  mc.EVAL_ON_ORG:
+          print('Translating labels...')
+          pred_cls[(pred_cls!=0)*(pred_cls!=8)*(pred_cls!=9)*(pred_cls!=10)] =0 
+          pred_cls[pred_cls==8]=2
+          pred_cls[pred_cls==9]=3
+          pred_cls[pred_cls==10]=1      
+      
+      cm+=confusion_matrix(y_true=label_per_batch.flatten(), y_pred=pred_cls.flatten(), labels=range(mc.NUM_CLASS))
       # Evaluation
       iou, tps, fps, fns = evaluate_iou(
           label_per_batch[:mc.BATCH_SIZE-offset],
@@ -161,25 +169,30 @@ def eval_once(
         eval_summary_phs['Timing/detect']:_t['detect'].average_time/mc.BATCH_SIZE,
         eval_summary_phs['Timing/read']:_t['read'].average_time/mc.BATCH_SIZE,
     }
-
+    if mc.EVAL_ON_ORG:
+        classes=['unknown', 'car', 'pedestrian', 'cyclist']
+        num_of_classes=4
+    else:
+        classes=mc.CLASSES
+        num_of_classes=mc.NUM_CLASS
     print ('  Accuracy:')
-    for i in range(1, mc.NUM_CLASS):
-      print ('    {}:'.format(mc.CLASSES[i]))
+    for i in range(1, num_of_classes):
+      print ('    {}:'.format(classes[i]))
       print ('\tPixel-seg: P: {:.3f}, R: {:.3f}, IoU: {:.3f}'.format(
           pr[i], re[i], ious[i]))
       eval_sum_feed_dict[
-          eval_summary_phs['Pixel_seg_accuracy/'+mc.CLASSES[i]+'_iou']] = ious[i]
+          eval_summary_phs['Pixel_seg_accuracy/'+classes[i]+'_iou']] = ious[i]
       eval_sum_feed_dict[
-          eval_summary_phs['Pixel_seg_accuracy/'+mc.CLASSES[i]+'_precision']] = pr[i]
+          eval_summary_phs['Pixel_seg_accuracy/'+classes[i]+'_precision']] = pr[i]
       eval_sum_feed_dict[
-          eval_summary_phs['Pixel_seg_accuracy/'+mc.CLASSES[i]+'_recall']] = re[i]
+          eval_summary_phs['Pixel_seg_accuracy/'+classes[i]+'_recall']] = re[i]
 
     eval_summary_str = sess.run(eval_summary_ops, feed_dict=eval_sum_feed_dict)
     for sum_str in eval_summary_str:
       summary_writer.add_summary(sum_str, global_step)
     summary_writer.flush()  
     cm = cm / cm.sum(axis=1)[:, np.newaxis]  
-    print_cm(cm, mc.CLASSES)
+    print_cm(cm, classes)
 
 def evaluate():
   """Evaluate."""
@@ -204,6 +217,8 @@ def evaluate():
             mc = kitti_squeezeSeg_config2()
       if FLAGS.label_format=='original_two_channel':
             mc = kitti_squeezeSeg_config_two_channel()
+      if FLAGS.label_format=='final':
+            mc = kitti_squeezeSeg_config_final()
       mc.LOAD_PRETRAINED_MODEL = False
       mc.BATCH_SIZE = 1 # TODO(bichen): fix this hard-coded batch size.
       model = SqueezeSeg(mc)
@@ -218,6 +233,8 @@ def evaluate():
       imdb = kitti2(FLAGS.image_set, FLAGS.data_path, mc)
     if FLAGS.label_format=='original_two_channel':
       imdb = kitti(FLAGS.image_set, FLAGS.data_path, mc)
+    if FLAGS.label_format=='final':
+      imdb = kitti_final(FLAGS.image_set, FLAGS.data_path, mc)
 
     eval_summary_ops = []
     eval_summary_phs = {}
@@ -226,6 +243,7 @@ def evaluate():
         'Timing/read', 
         'Timing/detect',
     ]
+    
     for i in range(1, mc.NUM_CLASS):
       eval_summary_names.append('Pixel_seg_accuracy/'+mc.CLASSES[i]+'_iou')
       eval_summary_names.append('Pixel_seg_accuracy/'+mc.CLASSES[i]+'_precision')
